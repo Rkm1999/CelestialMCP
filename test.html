@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Server Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #333;
+        }
+        button {
+            padding: 10px 15px;
+            margin: 5px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+            white-space: pre-wrap;
+        }
+        input, select {
+            padding: 8px;
+            margin: 5px 0;
+            width: 200px;
+        }
+        .input-group {
+            margin-bottom: 10px;
+        }
+        label {
+            display: inline-block;
+            width: 100px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Celestial Position MCP Server Test</h1>
+    
+    <h2>Tools</h2>
+    
+    <h3>Get Celestial Position</h3>
+    <div class="input-group">
+        <label for="objectName">Object:</label>
+        <input type="text" id="objectName" value="Jupiter">
+    </div>
+    <div class="input-group">
+        <label for="useSystemTime">Use System Time:</label>
+        <select id="useSystemTime">
+            <option value="true">Yes</option>
+            <option value="false">No</option>
+        </select>
+    </div>
+    <div class="input-group" id="dateTimeGroup" style="display: none;">
+        <label for="dateTime">Date/Time:</label>
+        <input type="datetime-local" id="dateTime">
+    </div>
+    <button onclick="getPosition()">Get Position</button>
+    
+    <h3>List Celestial Objects</h3>
+    <div class="input-group">
+        <label for="category">Category:</label>
+        <select id="category">
+            <option value="all">All</option>
+            <option value="planets">Planets</option>
+            <option value="stars">Stars</option>
+            <option value="dso">Deep Sky Objects</option>
+        </select>
+    </div>
+    <button onclick="listObjects()">List Objects</button>
+    
+    <h3>Discover Server</h3>
+    <button onclick="discoverServer()">Discover</button>
+    
+    <h2>Result</h2>
+    <div id="result">Results will appear here...</div>
+    
+    <script>
+        // Toggle date/time input based on useSystemTime selection
+        document.getElementById('useSystemTime').addEventListener('change', function() {
+            const dateTimeGroup = document.getElementById('dateTimeGroup');
+            dateTimeGroup.style.display = this.value === 'false' ? 'block' : 'none';
+        });
+        
+        // Set default date/time to now
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        document.getElementById('dateTime').value = `${year}-${month}-${day}T${hours}:${minutes}`;
+        
+        // Function to display results
+        function displayResult(data) {
+            const resultElement = document.getElementById('result');
+            resultElement.textContent = JSON.stringify(data, null, 2);
+        }
+        
+        // Function to make MCP request
+        async function mcpRequest(method, params = {}) {
+            try {
+                const response = await fetch('http://localhost:3005/mcp', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        jsonrpc: '2.0',
+                        id: Date.now(),
+                        method: method,
+                        params: params
+                    })
+                });
+                
+                const data = await response.json();
+                displayResult(data);
+                return data;
+            } catch (error) {
+                displayResult({ error: error.message });
+                return { error: error.message };
+            }
+        }
+        
+        // Get celestial position
+        async function getPosition() {
+            const objectName = document.getElementById('objectName').value;
+            const useSystemTime = document.getElementById('useSystemTime').value === 'true';
+            const dateTime = document.getElementById('dateTime').value;
+            
+            const arguments = {
+                objectName: objectName,
+                useSystemTime: useSystemTime
+            };
+            
+            if (!useSystemTime && dateTime) {
+                arguments.dateTime = new Date(dateTime).toISOString();
+            }
+            
+            await mcpRequest('mcp.toolCall', {
+                name: 'getCelestialPosition',
+                arguments: arguments
+            });
+        }
+        
+        // List celestial objects
+        async function listObjects() {
+            const category = document.getElementById('category').value;
+            
+            await mcpRequest('mcp.toolCall', {
+                name: 'listCelestialObjects',
+                arguments: {
+                    category: category
+                }
+            });
+        }
+        
+        // Discover server
+        async function discoverServer() {
+            await mcpRequest('mcp.discover');
+        }
+    </script>
+</body>
+</html>
