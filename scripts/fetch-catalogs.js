@@ -1,8 +1,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import fetch from 'node-fetch';
+import * as https from 'https';
+import * as http from 'http';
 
-const DATA_DIR = path.join(__dirname, '../data');
+const DATA_DIR = path.join(process.cwd(), 'data');
 
 // Catalog URLs - using raw GitHub URLs directly
 const CATALOGS = [
@@ -21,7 +22,7 @@ const CATALOGS = [
 /**
  * Ensure directory exists
  */
-function ensureDirectoryExists(dir: string): void {
+function ensureDirectoryExists(dir) {
   if (!fs.existsSync(dir)) {
     console.log(`Creating directory: ${dir}`);
     fs.mkdirSync(dir, { recursive: true });
@@ -31,38 +32,47 @@ function ensureDirectoryExists(dir: string): void {
 /**
  * Download a file from URL
  */
-async function downloadFile(url: string, destination: string): Promise<void> {
+async function downloadFile(url, destination) {
   const filePath = path.join(DATA_DIR, destination);
   console.log(`Downloading ${url} to ${filePath}...`);
   
-  try {
-    const response = await fetch(url);
+  return new Promise((resolve, reject) => {
+    // Determine which protocol to use
+    const protocol = url.startsWith('https') ? https : http;
     
-    if (!response.ok) {
-      throw new Error(`Failed to download ${url}: ${response.statusText}`);
-    }
-    
-    // Create a write stream to save the file
-    const fileStream = fs.createWriteStream(filePath);
-    
-    return new Promise((resolve, reject) => {
-      // Pipe the response body to the file
-      response.body?.pipe(fileStream);
+    // Make the HTTP/HTTPS request
+    const request = protocol.get(url, (response) => {
+      if (response.statusCode !== 200) {
+        reject(new Error(`Failed to download ${url}: HTTP ${response.statusCode}`));
+        return;
+      }
+      
+      // Create a write stream to save the file
+      const fileStream = fs.createWriteStream(filePath);
+      
+      // Pipe the response to the file
+      response.pipe(fileStream);
       
       fileStream.on('finish', () => {
+        fileStream.close();
         console.log(`Successfully downloaded ${destination}`);
         resolve();
       });
       
       fileStream.on('error', (err) => {
+        fs.unlink(filePath, () => {}); // Delete the file if there's an error
         console.error(`Error writing to file: ${err.message}`);
         reject(err);
       });
     });
-  } catch (error) {
-    console.error(`Error downloading file: ${error}`);
-    throw error;
-  }
+    
+    request.on('error', (err) => {
+      console.error(`Error during request: ${err.message}`);
+      reject(err);
+    });
+    
+    request.end();
+  });
 }
 
 /**
@@ -87,4 +97,7 @@ async function main() {
 }
 
 // Run the main function
-main();
+main().catch(error => {
+  console.error('An error occurred in the main process:', error);
+  process.exit(1);
+});

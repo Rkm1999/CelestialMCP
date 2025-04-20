@@ -10,11 +10,3 @@ export const OBSERVER_CONFIG = {
   temperature: 15, // default temperature in Celsius
   pressure: 1013.25 // default pressure in hPa
 };
-
-/**
- * Server configuration
- */
-export const SERVER_CONFIG = {
-  port: 3005,  // Changed from 3004 because that port was already in use
-  host: 'localhost'
-};

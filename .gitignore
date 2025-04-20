@@ -1,37 +1,30 @@
-# Dependency directories
+# Node.js dependencies
 node_modules/
 
 # Build output
 dist/
-build/
 
 # Environment variables
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
 
-# Log files
+# IDE files
+.vscode/
+.idea/
+
+# Logs
 logs/
 *.log
 npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
 
-# Editor directories and files
-.idea/
-.vscode/
-*.swp
-*.swo
-*.sublime-workspace
-
-# OS specific
+# Operating System files
 .DS_Store
 Thumbs.db
 
-# Exclude large catalog files
-data/*.csv
-# But include sample catalogs if they exist
-!data/sample_*.csv
-!data/enhanced_*.csv
+# Temporary files
+tmp/
+temp/
+
+# HYG database and other large catalog files already present in 'data/' directory
+# These files should be downloaded using the fetch-catalogs.js script
+data/hygdata_v*.csv
+data/ngc.csv

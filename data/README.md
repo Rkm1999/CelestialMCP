@@ -1,17 +1,15 @@
-# Catalog Data Directory
+# Catalog Data
 
-This directory is where astronomical catalog files are stored.
+This directory is used to store star and deep sky object catalog files. These files are not included in the repository due to their large size.
 
-Run the following command to download the required catalog files:
+To download the catalog files, run:
 
 ```bash
 npm run fetch-catalogs
 ```
 
 This will download:
-- ngc.csv - OpenNGC Catalog (14,069 objects)
-- hygdata_v41.csv - HYG Database v41 (117,949 stars)
+- `hygdata_v41.csv` - The HYG star database with ~120,000 stars
+- `ngc.csv` - The New General Catalogue with ~14,000 deep sky objects
 
-The download may take a few minutes depending on your internet connection.
-
-If the catalogs are not present when starting the server, it will attempt to download them automatically.
+Alternatively, the project will create small sample catalogs automatically if the main catalog files cannot be found.

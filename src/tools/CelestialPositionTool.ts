@@ -47,34 +47,11 @@ class CelestialPositionTool extends MCPTool<CelestialPositionInput> {
       // Get the date (either system time or provided time)
       let date;
       if (params.useSystemTime || !params.dateTime) {
-        // Get current system time
+        // Get current system time - we'll use this directly without timezone adjustments
+        // This ensures calculations are correct for the current time
         date = new Date(); 
-        
-        // Adjust for observer's time zone based on longitude
-        // Each 15 degrees of longitude corresponds to roughly 1 hour time difference
-        const timeZoneOffsetHours = OBSERVER_CONFIG.longitude / 15;
-        
-        // Convert the offset to milliseconds and adjust the date
-        // A positive longitude means east of Greenwich (ahead of UTC)
-        // A negative longitude means west of Greenwich (behind UTC)
-        const timeZoneOffsetMillis = timeZoneOffsetHours * 60 * 60 * 1000;
-        
-        // Get the UTC time first to remove the local system time zone effect
-        const utcTime = Date.UTC(
-          date.getUTCFullYear(),
-          date.getUTCMonth(),
-          date.getUTCDate(),
-          date.getUTCHours(),
-          date.getUTCMinutes(),
-          date.getUTCSeconds(),
-          date.getUTCMilliseconds()
-        );
-        
-        // Create a new date with the adjusted time
-        date = new Date(utcTime + timeZoneOffsetMillis);
       } else {
-        // Parse the provided date as UTC to avoid any local time zone adjustment
-        // The user is specifying a particular local time at the observer's location
+        // Parse the provided date
         date = new Date(params.dateTime);
         
         // Check if date is valid
@@ -106,15 +83,9 @@ class CelestialPositionTool extends MCPTool<CelestialPositionInput> {
           : "Above horizon"
         : "Below horizon (not visible)";
       
-      // Calculate time zone offset for presentation purposes
-      const tzOffsetHours = OBSERVER_CONFIG.longitude / 15;
-      const tzOffsetHoursWhole = Math.floor(Math.abs(tzOffsetHours));
-      const tzOffsetMinutes = Math.floor((Math.abs(tzOffsetHours) - tzOffsetHoursWhole) * 60);
-      const tzSign = tzOffsetHours >= 0 ? '+' : '-';
-      const tzFormatted = `UTC${tzSign}${tzOffsetHoursWhole.toString().padStart(2, '0')}:${tzOffsetMinutes.toString().padStart(2, '0')}`;
-      
-      // Format date to local time string based on observer's location
-      const localTimeString = `${date.toLocaleString()} ${tzFormatted}`;
+      // Format the date simply using the system's local time 
+      // This will use the computer's actual timezone rather than calculating a custom one
+      const localTimeString = date.toLocaleString();
       
       // Return the formatted results
       return {
@@ -137,4 +108,5 @@ class CelestialPositionTool extends MCPTool<CelestialPositionInput> {
   }
 }
 
-export default new CelestialPositionTool();
+// Export the class directly (not an instance)
+export default CelestialPositionTool;
