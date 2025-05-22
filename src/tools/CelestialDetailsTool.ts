@@ -1,73 +1,40 @@
 import { MCPTool } from 'mcp-framework';
 import { z } from 'zod';
 import { OBSERVER_CONFIG } from '../config.js';
-import { 
-  getEquatorialCoordinates, 
+import {
+  getEquatorialCoordinates,
   getObjectDetails,
+  convertToAltAz, // Added this import
   EquatorialCoordinates
 } from '../utils/astronomy.js';
 
 interface CelestialDetailsInput {
   objectName: string;
-  useSystemTime: boolean;
-  dateTime?: string;
-  latitude?: number;
-  longitude?: number;
-  elevation?: number;
+  // Removed: useSystemTime, dateTime, latitude, longitude, elevation
 }
 
 class CelestialDetailsTool extends MCPTool<CelestialDetailsInput> {
   name = 'getCelestialDetails';
-  description = 'Get detailed information about a celestial object including rise/set times, phase information, distance, and upcoming moon phases';
+  description = 'Get detailed information about a celestial object including rise/set times, phase information, distance, and upcoming moon phases (uses pre-configured location and system time)';
   
   protected schema = {
     objectName: {
       type: z.string(),
       description: 'Name of the celestial object (planet, star, messier object, etc.)'
-    },
-    useSystemTime: {
-      type: z.boolean(),
-      description: 'Whether to use the current system time (true) or a custom time (false)'
-    },
-    dateTime: {
-      type: z.string().optional(),
-      description: 'ISO format date and time for the observation (e.g., "2025-04-15T21:30:00"), only used if useSystemTime is false'
-    },
-    latitude: {
-      type: z.number().optional(),
-      description: 'Observer latitude in degrees (optional, defaults to Vancouver)'
-    },
-    longitude: {
-      type: z.number().optional(),
-      description: 'Observer longitude in degrees (optional, defaults to Vancouver)'
-    },
-    elevation: {
-      type: z.number().optional(),
-      description: 'Observer elevation in meters (optional, defaults to Vancouver)'
     }
+    // Removed: useSystemTime, dateTime, latitude, longitude, elevation
   };
 
   async execute(params: CelestialDetailsInput) {
     try {
-      // Get the date (either system time or provided time)
-      let date;
-      if (params.useSystemTime || !params.dateTime) {
-        date = new Date();
-      } else {
-        // Parse the provided date as UTC
-        date = new Date(params.dateTime);
-        
-        // Check if date is valid
-        if (isNaN(date.getTime())) {
-          throw new Error(`Invalid date format: ${params.dateTime}. Use ISO format like "2025-04-15T21:30:00".`);
-        }
-      }
+      // Always use current system time
+      const date = new Date();
 
-      // Use provided coordinates or default to configured values
+      // Always use pre-configured observer location
       const observer = {
-        latitude: params.latitude || OBSERVER_CONFIG.latitude,
-        longitude: params.longitude || OBSERVER_CONFIG.longitude,
-        elevation: params.elevation || OBSERVER_CONFIG.altitude,
+        latitude: OBSERVER_CONFIG.latitude,
+        longitude: OBSERVER_CONFIG.longitude,
+        elevation: OBSERVER_CONFIG.altitude,
         temperature: OBSERVER_CONFIG.temperature,
         pressure: OBSERVER_CONFIG.pressure
       };
@@ -79,15 +46,24 @@ class CelestialDetailsTool extends MCPTool<CelestialDetailsInput> {
       } catch (error: any) {
         throw new Error(`Could not find object: ${params.objectName}. ${error.message}`);
       }
+
+      // Convert to horizontal (altaz) coordinates (NEW)
+      const altazCoords = convertToAltAz(equatorialCoords, observer, date);
       
       // Get detailed information
       const details = getObjectDetails(params.objectName, date, observer);
       
       // Format the location for display
-      const locationName = params.latitude ? 
-        `Custom (${observer.latitude.toFixed(4)}°, ${observer.longitude.toFixed(4)}°)` : 
-        `Vancouver (${OBSERVER_CONFIG.latitude.toFixed(4)}°, ${OBSERVER_CONFIG.longitude.toFixed(4)}°)`;
+      const locationName = `Configured (${OBSERVER_CONFIG.latitude.toFixed(4)}°, ${OBSERVER_CONFIG.longitude.toFixed(4)}°)`;
       
+      // Calculate visibility (NEW)
+      const isAboveHorizon = altazCoords.altitude > 0;
+      const visibility = isAboveHorizon
+        ? altazCoords.altitude > 30
+          ? "Excellent visibility"
+          : "Above horizon"
+        : "Below horizon (not visible)";
+
       // Format the response
       const response: any = {
         object: params.objectName,
@@ -97,8 +73,16 @@ class CelestialDetailsTool extends MCPTool<CelestialDetailsInput> {
           equatorial: {
             rightAscension: equatorialCoords.rightAscension.toFixed(4) + "h",
             declination: equatorialCoords.declination.toFixed(4) + "°"
+          },
+          // Added altitude and azimuth to response
+          horizontal: {
+              altitude: altazCoords.altitude.toFixed(4) + "°",
+              azimuth: altazCoords.azimuth.toFixed(4) + "°"
           }
-        }
+        },
+        // Added these fields
+        aboveHorizon: isAboveHorizon ? "Yes" : "No",
+        visibility: visibility
       };
       
       // Add rise/set/transit times if available

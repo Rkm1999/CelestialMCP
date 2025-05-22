@@ -709,7 +709,7 @@ export function getObjectDetails(objectName: string, date: Date, observer: Obser
   
   // If we found coordinates for a star or DSO, calculate rise/set times
   if (equatorialCoords && !isSolarSystemObject) {
-    // Improved handling for fixed objects using astronomy-engine
+    console.log(`[DEBUG] Attempting rise/set for fixed object: ${objectName} (RA: ${equatorialCoords.rightAscension}h, Dec: ${equatorialCoords.declination}°)`);
     
     // Check if the object never rises/sets at this latitude
     const decRad = equatorialCoords.declination * Math.PI / 180;
@@ -721,6 +721,7 @@ export function getObjectDetails(objectName: string, date: Date, observer: Obser
       const alwaysUp = equatorialCoords.declination > 0 && observer.latitude > 0;
       const alwaysDown = equatorialCoords.declination < 0 && observer.latitude < 0;
       
+      console.log(`[DEBUG] Object ${objectName} is circumpolar.`);
       return {
         neverSets: alwaysUp,
         neverRises: alwaysDown || (!alwaysUp && Math.abs(cosH) > 1),
@@ -748,23 +749,32 @@ export function getObjectDetails(objectName: string, date: Date, observer: Obser
     let riseTime, transitTime, setTime;
     
     try {
+      console.log(`[DEBUG] Searching for rise time for ${objectName} from ${startTime.toISOString()}`);
       // Find rise time (1 = rising)
       riseTime = Astronomy.SearchRiseSet(Astronomy.Body.Star1, astroObserver, 1, startTime, 1);
-    } catch (e) {
+      console.log(`[DEBUG] Rise time found: ${riseTime ? new Date(riseTime.date).toISOString() : 'None'}`);
+    } catch (e: any) {
+      console.error(`[DEBUG] Error finding rise time for ${objectName}: ${e.message}`);
       riseTime = null; // Object may not rise today
     }
     
     try {
+      console.log(`[DEBUG] Searching for transit time for ${objectName}`);
       // Find transit time (hour angle = 0)
       transitTime = Astronomy.SearchHourAngle(Astronomy.Body.Star1, astroObserver, 0, startTime, 1);
-    } catch (e) {
+      console.log(`[DEBUG] Transit time found: ${transitTime ? transitTime.time.toString() : 'None'}`);
+    } catch (e: any) {
+      console.error(`[DEBUG] Error finding transit time for ${objectName}: ${e.message}`);
       transitTime = null;
     }
     
     try {
+      console.log(`[DEBUG] Searching for set time for ${objectName}`);
       // Find set time (-1 = setting)
       setTime = Astronomy.SearchRiseSet(Astronomy.Body.Star1, astroObserver, -1, startTime, 1);
-    } catch (e) {
+      console.log(`[DEBUG] Set time found: ${setTime ? new Date(setTime.date).toISOString() : 'None'}`);
+    } catch (e: any) {
+      console.error(`[DEBUG] Error finding set time for ${objectName}: ${e.message}`);
       setTime = null; // Object may not set today
     }
     
@@ -773,6 +783,7 @@ export function getObjectDetails(objectName: string, date: Date, observer: Obser
     const transitDate = transitTime ? transitTime.time : null;
     const setDate = setTime ? new Date(setTime.date) : null;
     
+    console.log(`[DEBUG] Final riseDate: ${riseDate}, transitDate: ${transitDate}, setDate: ${setDate}`);
     return {
       riseTime: riseDate,
       transitTime: { time: transitDate },
