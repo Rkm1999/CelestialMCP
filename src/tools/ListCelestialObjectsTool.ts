@@ -13,60 +13,87 @@ class ListCelestialObjectsTool extends MCPTool<ListCelestialObjectsInput> {
   protected schema = {
     category: {
       type: z.string().optional(),
-      description: 'Optional category filter ("planets", "stars", "dso", or "all"). Default is "all".'
+      description: 'Optional category filter ("planets", "stars", "messier", "ic", "ngc", "dso", or "all"). Default is "all".'
     }
   };
 
   async execute(params: ListCelestialObjectsInput) {
     try {
-      // Get all celestial objects from the astronomy utility
-      const categories = listCelestialObjects();
-      
-      // Filter by category if specified
-      if (params.category && params.category.toLowerCase() !== 'all') {
-        const normalizedCategory = params.category.toLowerCase();
-        
-        // Map user-friendly categories to internal category names
-        const categoryMap: Record<string, string> = {
-          'planets': 'Solar System Objects',
-          'stars': 'Stars',
-          'dso': 'Deep Sky Objects'
-        };
-        
-        const requestedCategory = categoryMap[normalizedCategory] || normalizedCategory;
-        
-        // Filter to just the requested category
-        const filteredCategories = categories.filter(cat => 
-          cat.category.toLowerCase() === requestedCategory.toLowerCase());
-        
-        if (filteredCategories.length === 0) {
-          return {
-            message: `No objects found in category "${params.category}". Available categories: planets, stars, dso.`,
-            availableCategories: categories.map(cat => cat.category)
-          };
+        const allCategoriesFromAstronomy = listCelestialObjects(); // Get all categories from astronomy.ts
+
+        let relevantCategories: { category: string, objects: string[] }[] = [];
+
+        if (params.category) {
+            const requestedCategoryLower = params.category.toLowerCase();
+
+            if (requestedCategoryLower === 'all') {
+                const totalObjects = allCategoriesFromAstronomy.reduce((sum, cat) => sum + cat.objects.length, 0);
+                return {
+                    totalCategories: allCategoriesFromAstronomy.length,
+                    totalObjects: totalObjects,
+                    categories: allCategoriesFromAstronomy.map(cat => ({
+                        category: cat.category,
+                        objectCount: cat.objects.length,
+                        objects: cat.objects
+                    }))
+                };
+            } else if (requestedCategoryLower === 'dso') {
+                const dsoCategories = allCategoriesFromAstronomy.filter(cat =>
+                    cat.category === 'Messier Objects' ||
+                    cat.category === 'IC Objects' ||
+                    cat.category === 'NGC Objects' ||
+                    cat.category === 'Other Deep Sky Objects'
+                );
+                const totalObjectsDSO = dsoCategories.reduce((sum, cat) => sum + cat.objects.length, 0);
+                return {
+                    totalCategories: dsoCategories.length,
+                    totalObjects: totalObjectsDSO,
+                    categories: dsoCategories.map(cat => ({
+                        category: cat.category,
+                        objectCount: cat.objects.length,
+                        objects: cat.objects
+                    }))
+                };
+            } else {
+                // For specific categories like 'planets', 'stars', 'messier', 'ic', 'ngc'
+                const targetCategory = allCategoriesFromAstronomy.find(cat => {
+                    if (requestedCategoryLower === 'planets' && cat.category === 'Solar System Objects') return true;
+                    if (requestedCategoryLower === 'stars' && cat.category === 'Stars') return true;
+                    if (requestedCategoryLower === 'messier' && cat.category === 'Messier Objects') return true;
+                    if (requestedCategoryLower === 'ic' && cat.category === 'IC Objects') return true;
+                    if (requestedCategoryLower === 'ngc' && cat.category === 'NGC Objects') return true;
+                    return false;
+                });
+
+                if (!targetCategory) {
+                    const userFriendlyCategories = ['planets', 'stars', 'messier', 'ic', 'ngc', 'dso', 'all'];
+                    return {
+                        message: `No objects found in category "${params.category}". Available categories: ${userFriendlyCategories.join(', ')}.`,
+                        availableCategories: userFriendlyCategories
+                    };
+                }
+
+                return {
+                    category: params.category, // Echo back the requested category
+                    objectCount: targetCategory.objects.length,
+                    objects: targetCategory.objects
+                };
+            }
+        } else {
+            // Default behavior if no category parameter is provided (same as 'all')
+            const totalObjects = allCategoriesFromAstronomy.reduce((sum, cat) => sum + cat.objects.length, 0);
+            return {
+                totalCategories: allCategoriesFromAstronomy.length,
+                totalObjects: totalObjects,
+                categories: allCategoriesFromAstronomy.map(cat => ({
+                    category: cat.category,
+                    objectCount: cat.objects.length,
+                    objects: cat.objects
+                }))
+            };
         }
-        
-        return {
-          category: filteredCategories[0].category,
-          objectCount: filteredCategories[0].objects.length,
-          objects: filteredCategories[0].objects
-        };
-      }
-      
-      // If no category specified, return all categories
-      const totalObjects = categories.reduce((sum, cat) => sum + cat.objects.length, 0);
-      
-      return {
-        totalCategories: categories.length,
-        totalObjects: totalObjects,
-        categories: categories.map(cat => ({
-          category: cat.category,
-          objectCount: cat.objects.length,
-          objects: cat.objects
-        }))
-      };
     } catch (error: any) {
-      throw new Error(`Failed to list celestial objects: ${error.message}`);
+        throw new Error(`Failed to list celestial objects: ${error.message}`);
     }
   }
 }

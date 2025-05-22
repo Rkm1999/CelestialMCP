@@ -1,5 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 import { parse } from 'csv-parse/sync';
 import * as Astronomy from 'astronomy-engine';
 
@@ -440,7 +442,9 @@ export function loadStarCatalog(filePath: string): void {
  */
 export function initializeCatalogs(): void {
   // Use a direct path to the data directory
-  const dataDir = path.join(process.cwd(), 'data');
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = dirname(__filename);
+  const dataDir = path.resolve(__dirname, '../../data');
   console.log(`Looking for catalog data in: ${dataDir}`);
   
   // Check if data directory exists
@@ -925,22 +929,29 @@ export function listCelestialObjects(category: string = 'all'): { category: stri
     });
   }
   
-  if (category === 'all' || category === 'dso') {
-    // Separate Messier and other DSOs
+  if (category === 'all' || category.toLowerCase() === 'dso' ||
+      category.toLowerCase() === 'messier' || category.toLowerCase() === 'ic' || category.toLowerCase() === 'ngc') {
+
     const messierObjects: string[] = [];
+    const icObjects: string[] = [];
+    const ngcObjects: string[] = [];
     const otherDsoObjects: string[] = [];
-    
+
     Array.from(DSO_CATALOG.keys()).forEach(name => {
-      const formattedName = name.charAt(0).toUpperCase() + name.slice(1); // Capitalize first letter
-      
+      const formattedName = name.charAt(0).toUpperCase() + name.slice(1);
+
       if (name.startsWith('m') && /^m\d+$/i.test(name)) {
         messierObjects.push(formattedName);
+      } else if (name.startsWith('ic') && /^ic\d+$/i.test(name)) {
+        icObjects.push(formattedName);
+      } else if (name.startsWith('ngc') && /^ngc\d+$/i.test(name)) {
+        ngcObjects.push(formattedName);
       } else {
         otherDsoObjects.push(formattedName);
       }
     });
-    
-    if (messierObjects.length > 0) {
+
+    if ((category === 'all' || category.toLowerCase() === 'messier' || category.toLowerCase() === 'dso') && messierObjects.length > 0) {
       result.push({
         category: 'Messier Objects',
         objects: messierObjects.sort((a, b) => {
@@ -950,12 +961,34 @@ export function listCelestialObjects(category: string = 'all'): { category: stri
         })
       });
     }
-    
-    if (otherDsoObjects.length > 0) {
+
+    if ((category === 'all' || category.toLowerCase() === 'ic' || category.toLowerCase() === 'dso') && icObjects.length > 0) {
       result.push({
-        category: 'Other Deep Sky Objects',
-        objects: otherDsoObjects.sort()
+        category: 'IC Objects',
+        objects: icObjects.sort((a, b) => {
+          const numA = parseInt(a.substring(2));
+          const numB = parseInt(b.substring(2));
+          return numA - numB;
+        })
       });
+    }
+
+    if ((category === 'all' || category.toLowerCase() === 'ngc' || category.toLowerCase() === 'dso') && ngcObjects.length > 0) {
+      result.push({
+        category: 'NGC Objects',
+        objects: ngcObjects.sort((a, b) => {
+          const numA = parseInt(a.substring(3));
+          const numB = parseInt(b.substring(3));
+          return numA - numB;
+        })
+      });
+    }
+    
+    if ((category === 'all' || category.toLowerCase() === 'dso') && otherDsoObjects.length > 0) {
+        result.push({
+            category: 'Other Deep Sky Objects',
+            objects: otherDsoObjects.sort()
+        });
     }
   }
   
