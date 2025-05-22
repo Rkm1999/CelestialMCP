@@ -1,4 +1,5 @@
 # CelestialMCP
+[![smithery badge](https://smithery.ai/badge/@Rkm1999/CelestialMCP)](https://smithery.ai/server/@Rkm1999/CelestialMCP)
 
 A Model Context Protocol (MCP) server for Claude AI that provides tools for calculating celestial object positions, rise/set times, and other astronomical data.
 
@@ -41,6 +42,14 @@ npm start
 ```
 
 ## Using with Claude Desktop
+
+### Installing via Smithery
+
+To install Celestial Positioning Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@Rkm1999/CelestialMCP):
+
+```bash
+npx -y @smithery/cli install @Rkm1999/CelestialMCP --client claude
+```
 
 ### Local Development
 
