@@ -7,6 +7,7 @@ import {
   convertToAltAz, // Added this import
   EquatorialCoordinates
 } from '../utils/astronomy.js';
+import * as Astronomy from 'astronomy-engine';
 
 interface CelestialDetailsInput {
   objectName: string;
@@ -86,31 +87,51 @@ class CelestialDetailsTool extends MCPTool<CelestialDetailsInput> {
       };
       
       // Add rise/set/transit times if available
-      if (details && details.riseTime) {
-        const riseDate = details.riseTime instanceof Date ? 
-          details.riseTime : new Date(details.riseTime.date);
-          
-        const transitDate = details.transitTime && details.transitTime.time instanceof Date ? 
-          details.transitTime.time : 
-          details.transitTime && details.transitTime.time ? 
-            new Date(details.transitTime.time.date) : null;
-            
-        const setDate = details.setTime instanceof Date ? 
-          details.setTime : new Date(details.setTime.date);
-        
-        response.visibilityTimes = {
-          rise: riseDate.toLocaleTimeString(),
-          transit: transitDate ? transitDate.toLocaleTimeString() : "Not visible",
-          set: setDate.toLocaleTimeString()
+      if (details) {
+        const formatTime = (timeObj: Date | Astronomy.AstroTime | null | undefined): string => {
+          if (!timeObj) return "N/A";
+          // AstroTime objects have a .date property which is a JS Date.
+          // Fixed objects might return JS Date directly for riseTime/setTime.
+          const date = timeObj instanceof Date ? timeObj : new Date((timeObj as Astronomy.AstroTime).date);
+          return date.toLocaleTimeString();
         };
+
+        let note = "";
+        if (details.isCircumpolar) {
+          if (details.alwaysAboveHorizon) {
+            note = "This object is circumpolar and remains above the horizon from this location.";
+          } else if (details.alwaysBelowHorizon) {
+            note = "This object is circumpolar and remains below the horizon from this location.";
+          } else {
+            note = "This object is circumpolar from this location.";
+          }
+        } else {
+          // Not circumpolar. Check if it doesn't rise/set and transit is below horizon.
+          if (!details.riseTime && !details.setTime &&
+              details.transitTime && details.transitTime.hor && details.transitTime.hor.altitude < 0) {
+            note = "This object does not rise above the horizon on this date from this location.";
+          }
+        }
         
-        // Add whether the object is currently above the horizon
-        const now = new Date();
-        const isRising = riseDate <= now && (setDate >= now || setDate <= riseDate);
-        response.isAboveHorizon = isRising;
+        const riseStr = formatTime(details.riseTime);
+        // details.transitTime is an event object like { time: AstroTime | Date, hor: HorizontalCoordinates }
+        const transitStr = formatTime(details.transitTime ? details.transitTime.time : null);
+        const setStr = formatTime(details.setTime);
+
+        if (riseStr === "N/A" && transitStr === "N/A" && setStr === "N/A" && !note) {
+            note = "Rise, transit, and set times are not available for this object on this date at this location.";
+        }
+
+        response.visibilityTimes = {
+          rise: riseStr,
+          transit: transitStr,
+          set: setStr
+        };
+          
+        if (note) response.visibilityTimes.note = note;
       } else {
         response.visibilityTimes = {
-          note: "Rise/set times not available for this object at this location"
+          note: "Astronomical details, including rise/set times, could not be determined for this object."
         };
       }
       

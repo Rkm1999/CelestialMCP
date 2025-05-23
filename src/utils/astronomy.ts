@@ -709,26 +709,6 @@ export function getObjectDetails(objectName: string, date: Date, observer: Obser
   
   // If we found coordinates for a star or DSO, calculate rise/set times
   if (equatorialCoords && !isSolarSystemObject) {
-    console.log(`[DEBUG] Attempting rise/set for fixed object: ${objectName} (RA: ${equatorialCoords.rightAscension}h, Dec: ${equatorialCoords.declination}°)`);
-    
-    // Check if the object never rises/sets at this latitude
-    const decRad = equatorialCoords.declination * Math.PI / 180;
-    const latRad = observer.latitude * Math.PI / 180;
-    const cosH = -Math.tan(latRad) * Math.tan(decRad);
-    
-    if (Math.abs(cosH) > 1) {
-      // Object never rises or sets (always above or below horizon)
-      const alwaysUp = equatorialCoords.declination > 0 && observer.latitude > 0;
-      const alwaysDown = equatorialCoords.declination < 0 && observer.latitude < 0;
-      
-      console.log(`[DEBUG] Object ${objectName} is circumpolar.`);
-      return {
-        neverSets: alwaysUp,
-        neverRises: alwaysDown || (!alwaysUp && Math.abs(cosH) > 1),
-        isCircumpolar: Math.abs(cosH) > 1
-      };
-    }
-    
     // Create a "star" body dynamically using Astronomy.DefineStar
     const tempStarName = "Star1"; // Use one of the predefined star slots
     
@@ -740,55 +720,61 @@ export function getObjectDetails(objectName: string, date: Date, observer: Obser
       1000 // Distance in light years - not critical for rise/set calculations
     );
     
-    // Now use astronomy-engine's SearchRiseSet and SearchHourAngle functions
-    // to find accurate times just like with solar system objects
-    
     const startTime = new Date(date);
     startTime.setHours(0, 0, 0, 0); // Start of the current day
     
-    let riseTime, transitTime, setTime;
+    let riseAstroTime, transitAstroEvent, setAstroTime, lowerCulminationEvent;
     
-    try {
-      console.log(`[DEBUG] Searching for rise time for ${objectName} from ${startTime.toISOString()}`);
-      // Find rise time (1 = rising)
-      riseTime = Astronomy.SearchRiseSet(Astronomy.Body.Star1, astroObserver, 1, startTime, 1);
-      console.log(`[DEBUG] Rise time found: ${riseTime ? new Date(riseTime.date).toISOString() : 'None'}`);
-    } catch (e: any) {
-      console.error(`[DEBUG] Error finding rise time for ${objectName}: ${e.message}`);
-      riseTime = null; // Object may not rise today
+    try { riseAstroTime = Astronomy.SearchRiseSet(Astronomy.Body.Star1, astroObserver, 1, startTime, 1); } catch (e) { riseAstroTime = null; }
+    try { transitAstroEvent = Astronomy.SearchHourAngle(Astronomy.Body.Star1, astroObserver, 0, startTime, 1); } catch (e) { transitAstroEvent = null; } // Upper culmination
+    try { setAstroTime = Astronomy.SearchRiseSet(Astronomy.Body.Star1, astroObserver, -1, startTime, 1); } catch (e) { setAstroTime = null; }
+    try { lowerCulminationEvent = Astronomy.SearchHourAngle(Astronomy.Body.Star1, astroObserver, 12, startTime, 1); } catch (e) { lowerCulminationEvent = null; } // Lower culmination
+
+    // Rise/Set times are AstroTime objects from astronomy-engine, or null.
+    // The .date property of AstroTime is a JS Date.
+    // For fixed objects, we convert to JS Date directly here for rise/set.
+    const riseDate = riseAstroTime ? new Date(riseAstroTime.date) : null;
+    const setDate = setAstroTime ? new Date(setAstroTime.date) : null;
+    // For transit, transitAstroEvent is { time: AstroTime, hor: HorizontalCoordinates }
+    // We pass transitAstroEvent.time (which is AstroTime) to the tool.
+
+    let isCircumpolar = false;
+    let alwaysAboveHorizon = false;
+    let alwaysBelowHorizon = false;
+
+    // Check for circumpolar status: |Dec| > 90 - |Lat|
+    const isPotentiallyCircumpolar = Math.abs(equatorialCoords.declination) > (90 - Math.abs(observer.latitude));
+
+    if (isPotentiallyCircumpolar) {
+        isCircumpolar = true;
+        // If it's circumpolar, check culminations to determine if always visible/invisible.
+        if (lowerCulminationEvent && lowerCulminationEvent.hor && lowerCulminationEvent.hor.altitude > 0) {
+            alwaysAboveHorizon = true; // Min altitude (lower culmination) is above horizon.
+        }
+        if (transitAstroEvent && transitAstroEvent.hor && transitAstroEvent.hor.altitude < 0) {
+            alwaysBelowHorizon = true; // Max altitude (upper culmination) is below horizon.
+        }
+
+        // Fallback if culmination data is incomplete but rise/set are null
+        if (!alwaysAboveHorizon && !alwaysBelowHorizon) { // If not determined by culminations yet
+            if (riseDate === null && setDate === null && transitAstroEvent && transitAstroEvent.hor) {
+                if (transitAstroEvent.hor.altitude > 0) {
+                    alwaysAboveHorizon = true; 
+                } else {
+                    alwaysBelowHorizon = true;
+                }
+            }
+        }
     }
-    
-    try {
-      console.log(`[DEBUG] Searching for transit time for ${objectName}`);
-      // Find transit time (hour angle = 0)
-      transitTime = Astronomy.SearchHourAngle(Astronomy.Body.Star1, astroObserver, 0, startTime, 1);
-      console.log(`[DEBUG] Transit time found: ${transitTime ? transitTime.time.toString() : 'None'}`);
-    } catch (e: any) {
-      console.error(`[DEBUG] Error finding transit time for ${objectName}: ${e.message}`);
-      transitTime = null;
-    }
-    
-    try {
-      console.log(`[DEBUG] Searching for set time for ${objectName}`);
-      // Find set time (-1 = setting)
-      setTime = Astronomy.SearchRiseSet(Astronomy.Body.Star1, astroObserver, -1, startTime, 1);
-      console.log(`[DEBUG] Set time found: ${setTime ? new Date(setTime.date).toISOString() : 'None'}`);
-    } catch (e: any) {
-      console.error(`[DEBUG] Error finding set time for ${objectName}: ${e.message}`);
-      setTime = null; // Object may not set today
-    }
-    
-    // Convert AstroTime objects to JavaScript Date objects if needed
-    const riseDate = riseTime ? new Date(riseTime.date) : null;
-    const transitDate = transitTime ? transitTime.time : null;
-    const setDate = setTime ? new Date(setTime.date) : null;
-    
-    console.log(`[DEBUG] Final riseDate: ${riseDate}, transitDate: ${transitDate}, setDate: ${setDate}`);
+
     return {
       riseTime: riseDate,
-      transitTime: { time: transitDate },
+      transitTime: transitAstroEvent ? { time: transitAstroEvent.time, hor: transitAstroEvent.hor } : null,
       setTime: setDate,
-      isFixedObject: true
+      isFixedObject: true,
+      isCircumpolar: isCircumpolar,
+      alwaysAboveHorizon: alwaysAboveHorizon,
+      alwaysBelowHorizon: alwaysBelowHorizon
     };
   }
   
@@ -940,8 +926,8 @@ export function listCelestialObjects(category: string = 'all'): { category: stri
     });
   }
   
-  if (category === 'all' || category.toLowerCase() === 'dso' ||
-      category.toLowerCase() === 'messier' || category.toLowerCase() === 'ic' || category.toLowerCase() === 'ngc') {
+  if (category === 'all' || category === 'dso' ||
+      category === 'messier' || category === 'ic' || category === 'ngc') {
 
     const messierObjects: string[] = [];
     const icObjects: string[] = [];
