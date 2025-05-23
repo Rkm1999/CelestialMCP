@@ -15,12 +15,12 @@ interface CelestialDetailsInput {
 
 class CelestialDetailsTool extends MCPTool<CelestialDetailsInput> {
   name = 'getCelestialDetails';
-  description = 'Get detailed information about a celestial object including rise/set times, phase information, distance, and upcoming moon phases (uses pre-configured location and system time)';
+  description = "Retrieves detailed astronomical information for a specified celestial object (e.g., planet, star, Messier object, NGC/IC object). Information includes current equatorial and horizontal (altitude/azimuth) coordinates, visibility status (above/below horizon), rise/transit/set times, and, where applicable, distance, phase illumination, and upcoming moon phases. All calculations are performed for the pre-configured observer location and the current system time. The tool automatically resolves common names (e.g., 'Andromeda Galaxy' to 'M31') and handles various catalog identifiers.";
   
   protected schema = {
     objectName: {
       type: z.string(),
-      description: 'Name of the celestial object (planet, star, messier object, etc.)'
+      description: "The name or catalog identifier of the celestial object. Examples: 'Jupiter', 'Sirius', 'M31', 'NGC 7000', 'Crab Nebula'. The tool will attempt to resolve common names."
     }
     // Removed: useSystemTime, dateTime, latitude, longitude, elevation
   };

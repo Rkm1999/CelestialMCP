@@ -8,12 +8,12 @@ interface ListCelestialObjectsInput {
 
 class ListCelestialObjectsTool extends MCPTool<ListCelestialObjectsInput> {
   name = 'listCelestialObjects';
-  description = 'List all available celestial objects that can be queried';
+  description = "Lists available celestial objects that can be queried by other tools. Objects are grouped by category. You can request all objects, or filter by a specific category. This tool helps in discovering what objects are known to the system.";
   
   protected schema = {
     category: {
       type: z.string().optional(),
-      description: 'Optional category filter ("planets", "stars", "messier", "ic", "ngc", "dso", or "all"). Default is "all".'
+      description: "Optional. Filters the list by category. Valid categories are: 'planets' (for Solar System objects like Sun, Moon, and planets), 'stars', 'messier' (for Messier objects), 'ic' (for Index Catalogue objects), 'ngc' (for New General Catalogue objects), 'dso' (for all Deep Sky Objects, including Messier, IC, NGC, and others), or 'all' (to list objects from all available categories). If omitted, defaults to 'all'."
     }
   };
 
@@ -95,7 +95,7 @@ class ListCelestialObjectsTool extends MCPTool<ListCelestialObjectsInput> {
     } catch (error: any) {
         throw new Error(`Failed to list celestial objects: ${error.message}`);
     }
-  }
+    }
 }
 
 // Export the class directly (not an instance)
