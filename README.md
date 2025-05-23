@@ -35,7 +35,7 @@ The server provides two primary tools for the AI to use:
 
 1.  **Clone the repository (if you haven't already):**
     ```bash
-    git clone <repository-url>
+    git clone https://github.com/Rkm1999/CelestialMCP
     cd CelestialMCP
     ```
 
@@ -143,23 +143,26 @@ All astronomical calculations performed by these tools use the **pre-configured 
 -   "Can you list all objects known to the system?"
 
 ## Project Structure
+
+```text
 CelestialMCP/
 ├── src/
-│ ├── tools/ # MCP Tools provided to the AI
-│ │ ├── CelestialDetailsTool.ts # Tool to get detailed info for an object
-│ │ └── ListCelestialObjectsTool.ts # Tool to list available objects
-│ ├── utils/ # Utility functions
-│ │ └── astronomy.ts # Core astronomy calculations and catalog loading
-│ ├── config.ts # Observer's location and atmospheric conditions configuration
-│ └── index.ts # MCP Server entry point
+│   ├── tools/                      # MCP Tools provided to the AI
+│   │   ├── CelestialDetailsTool.ts   # Tool to get detailed info for an object
+│   │   └── ListCelestialObjectsTool.ts # Tool to list available objects
+│   ├── utils/                      # Utility functions
+│   │   └── astronomy.ts            # Core astronomy calculations and catalog loading
+│   ├── config.ts                   # Observer's location and atmospheric conditions configuration
+│   └── index.ts                    # MCP Server entry point
 ├── scripts/
-│ └── fetch-catalogs.js # Script to download astronomical catalogs
-├── data/ # Directory for catalog data files (e.g., hygdata_v41.csv, ngc.csv)
-│ ├── README.md # Information about data files
-│ ├── sample_dso.csv # Sample DSO data if full catalog isn't downloaded
-│ └── sample_stars.csv # Sample star data if full catalog isn't downloaded
+│   └── fetch-catalogs.js           # Script to download astronomical catalogs
+├── data/                           # Directory for catalog data files (e.g., hygdata_v41.csv, ngc.csv)
+│   ├── README.md                   # Information about data files
+│   ├── sample_dso.csv            # Sample DSO data if full catalog isn't downloaded
+│   └── sample_stars.csv          # Sample star data if full catalog isn't downloaded
 ├── package.json
 └── tsconfig.json
+```
 
 ## Default Configuration
 
