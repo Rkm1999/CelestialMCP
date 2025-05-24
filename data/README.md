@@ -1,15 +1,8 @@
-# Catalog Data
+# CelestialMCP Catalog Data
 
-This directory is used to store star and deep sky object catalog files. These files are not included in the repository due to their large size.
+This directory contains star and deep sky object (DSO) catalogs used by the CelestialMCP project.
 
-To download the catalog files, run:
-
-```bash
-npm run fetch-catalogs
-```
-
-This will download:
 - `hygdata_v41.csv` - The HYG star database with ~120,000 stars
 - `ngc.csv` - The New General Catalogue with ~14,000 deep sky objects
 
-Alternatively, the project will create small sample catalogs automatically if the main catalog files cannot be found.
+If the main catalog files are not found upon startup, the application will attempt to download them automatically by running the `npm run fetch-catalogs` script. If the download fails or is skipped, and no catalog files (including `sample_stars.csv` and `sample_dso.csv`) are present in the `data/` directory, the respective catalogs will be empty. For basic functionality with sample data, ensure `sample_stars.csv` and `sample_dso.csv` are present if main catalogs are unavailable.

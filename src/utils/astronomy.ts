@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { parse } from 'csv-parse/sync';
 import * as Astronomy from 'astronomy-engine';
+import { execSync } from 'child_process';
 
 // No custom class needed - we'll use our own calculations for fixed stars
 
@@ -11,8 +12,10 @@ import * as Astronomy from 'astronomy-engine';
 export interface EquatorialCoordinates {
   rightAscension: number; // in hours
   declination: number; // in degrees
-  commonName?: string;
-  type?: string;
+  magnitude?: number;     // Visual magnitude
+  name?: string;          // Canonical name (e.g., proper name, catalog ID like 'M31', 'HIP 12345')
+  commonName?: string;    // Common name, if different from 'name' (used more for DSOs)
+  type?: string;          // e.g., 'Star', 'Galaxy', 'Planet'
 }
 
 export interface HorizontalCoordinates {
@@ -29,33 +32,11 @@ export interface Observer {
 }
 
 // Catalogs to store loaded data
-const DSO_CATALOG: Map<string, EquatorialCoordinates> = new Map();
-const STAR_CATALOG: Map<string, EquatorialCoordinates> = new Map();
-const COMMON_NAMES: Map<string, string> = new Map(); // Maps common names to catalog IDs
+export const DSO_CATALOG: Map<string, EquatorialCoordinates> = new Map();
+export const STAR_CATALOG: Map<string, EquatorialCoordinates> = new Map();
+export const COMMON_NAMES: Map<string, string> = new Map(); // Maps common names to catalog IDs
 
-// Fallback hardcoded catalogs in case no database files are found
-const HARDCODED_STAR_CATALOG: Record<string, EquatorialCoordinates> = {
-  'Sirius': { rightAscension: 6.7525, declination: -16.7161 },
-  'Canopus': { rightAscension: 6.3992, declination: -52.6956 },
-  'Arcturus': { rightAscension: 14.2612, declination: 19.1822 },
-  'Vega': { rightAscension: 18.6157, declination: 38.7836 },
-  'Capella': { rightAscension: 5.2778, declination: 45.9981 },
-  'Rigel': { rightAscension: 5.2422, declination: -8.2017 },
-  'Procyon': { rightAscension: 7.6550, declination: 5.2242 },
-  'Betelgeuse': { rightAscension: 5.9194, declination: 7.4071 },
-  'Achernar': { rightAscension: 1.6285, declination: -57.2367 },
-  'Polaris': { rightAscension: 2.5301, declination: 89.2641 }
-};
-
-const HARDCODED_MESSIER_CATALOG: Record<string, EquatorialCoordinates> = {
-  'M1': { rightAscension: 5.5756, declination: 22.0145 }, // Crab Nebula
-  'M31': { rightAscension: 0.7122, declination: 41.2689 }, // Andromeda Galaxy
-  'M42': { rightAscension: 5.5883, declination: -5.3895 }, // Orion Nebula
-  'M45': { rightAscension: 3.7833, declination: 24.1167 }, // Pleiades
-  'M51': { rightAscension: 13.4997, declination: 47.1950 } // Whirlpool Galaxy
-};
-
-const SOLAR_SYSTEM_OBJECTS: Record<string, boolean> = {
+export const SOLAR_SYSTEM_OBJECTS: Record<string, boolean> = {
   'sun': true,
   'moon': true,
   'mercury': true,
@@ -76,13 +57,7 @@ const SOLAR_SYSTEM_OBJECTS: Record<string, boolean> = {
 export function loadDSOCatalog(filePath: string): void {
   try {
     if (!fs.existsSync(filePath)) {
-      console.warn(`DSO catalog file ${filePath} not found, using hardcoded catalog.`);
-      
-      // Load hardcoded data as fallback
-      Object.entries(HARDCODED_MESSIER_CATALOG).forEach(([name, coords]) => {
-        DSO_CATALOG.set(name.toLowerCase(), coords);
-      });
-      
+      console.warn(`DSO catalog file ${filePath} not found. Data from this file will not be loaded.`);
       return;
     }
     
@@ -150,39 +125,67 @@ export function loadDSOCatalog(filePath: string): void {
             // Parse Dec (format should be +/-DD:MM:SS.S)
             let decDegrees: number | undefined;
             if (record.Dec) {
-              const decParts = record.Dec.split(':');
-              if (decParts.length === 3) {
-                const degrees = parseFloat(decParts[0]);
-                const minutes = parseFloat(decParts[1]);
-                const seconds = parseFloat(decParts[2]);
-                if (!isNaN(degrees) && !isNaN(minutes) && !isNaN(seconds)) {
-                  const sign = degrees < 0 ? -1 : 1;
-                  decDegrees = Math.abs(degrees) + (minutes / 60) + (seconds / 3600);
-                  decDegrees *= sign;
+              const decStr = record.Dec.trim();
+              if (decStr !== '') {
+                const decParts = decStr.split(':');
+                if (decParts.length === 3) {
+                  const sign = decStr.startsWith('-') ? -1 : 1;
+                  // Remove sign for parsing absolute degrees, handle empty parts
+                  const degreesStr = decParts[0].replace(/^[+-]/, '');
+                  const minutesStr = decParts[1];
+                  const secondsStr = decParts[2];
+
+                  if (degreesStr !== '' && minutesStr !== '' && secondsStr !== '') {
+                      const degrees = parseFloat(degreesStr);
+                      const minutes = parseFloat(minutesStr);
+                      const seconds = parseFloat(secondsStr);
+
+                      if (!isNaN(degrees) && !isNaN(minutes) && !isNaN(seconds)) {
+                          decDegrees = (degrees + (minutes / 60) + (seconds / 3600)) * sign;
+                      }
+                  }
                 }
               }
             }
             
             // Only add valid entries
             if (raHours !== undefined && decDegrees !== undefined) {
-              // Add to catalog
+              let magnitude: number | undefined;
+              const vMagStr = record['V-Mag'];
+              const bMagStr = record['B-Mag'];
+
+              if (vMagStr && vMagStr.trim() !== '') {
+                const magVal = parseFloat(vMagStr);
+                if (!isNaN(magVal)) {
+                  magnitude = magVal;
+                }
+              } else if (bMagStr && bMagStr.trim() !== '') { // Fallback to B-Mag if V-Mag is not available
+                const magVal = parseFloat(bMagStr);
+                if (!isNaN(magVal)) {
+                  magnitude = magVal;
+                }
+              }
+
               DSO_CATALOG.set(name.toLowerCase(), {
+                name: name, // Store original name
                 rightAscension: raHours,
                 declination: decDegrees,
                 commonName: commonName,
-                type: type
+                type: type,
+                magnitude: magnitude
               });
               
               // Also store it by Messier number if available
               if (record.M && record.M !== '') {
-                // Remove leading zeros (convert '001' to '1')
                 const messierNumber = parseInt(record.M, 10).toString();
                 const messierName = 'M' + messierNumber;
                 DSO_CATALOG.set(messierName.toLowerCase(), {
                   rightAscension: raHours,
                   declination: decDegrees,
                   commonName: commonName,
-                  type: type
+                  type: type,
+                  magnitude: magnitude,
+                  name: messierName // Store Messier name
                 });
               }
               
@@ -240,13 +243,36 @@ export function loadDSOCatalog(filePath: string): void {
       if (!name || raHours === undefined || decDegrees === undefined || isNaN(raHours) || isNaN(decDegrees)) {
         continue;
       }
-      
+
+      let magnitude: number | undefined = undefined;
+      const vMagStr = record['V-Mag'] || record.VMAG || record.vmag;
+      const bMagStr = record['B-Mag'] || record.BMAG || record.bmag;
+      const magStr = record.magnitude || record.Magnitude || record.MAG || record.mag;
+
+      if (vMagStr !== undefined && String(vMagStr).trim() !== '') {
+        const magVal = parseFloat(String(vMagStr));
+        if (!isNaN(magVal)) {
+          magnitude = magVal;
+        }
+      } else if (bMagStr !== undefined && String(bMagStr).trim() !== '') {
+        const magVal = parseFloat(String(bMagStr));
+        if (!isNaN(magVal)) {
+          magnitude = magVal;
+        }
+      } else if (magStr !== undefined && String(magStr).trim() !== '') {
+        const magVal = parseFloat(String(magStr));
+        if (!isNaN(magVal)) {
+          magnitude = magVal;
+        }
+      }
       // Store the coordinates
       DSO_CATALOG.set(name.toLowerCase(), {
+        name: name,
         rightAscension: raHours,
         declination: decDegrees,
         commonName: commonName,
-        type: type
+        type: type,
+        magnitude: magnitude
       });
       
       // Store common name for lookup if available
@@ -257,12 +283,7 @@ export function loadDSOCatalog(filePath: string): void {
     
     console.log(`Loaded ${DSO_CATALOG.size} deep sky objects from ${filePath}`);
   } catch (error) {
-    console.error(`Failed to load DSO catalog: ${error}`);
-    
-    // Load hardcoded data as fallback
-    Object.entries(HARDCODED_MESSIER_CATALOG).forEach(([name, coords]) => {
-      DSO_CATALOG.set(name.toLowerCase(), coords);
-    });
+    console.error(`Failed to load DSO catalog from ${filePath}: ${error}. Data from this file will not be loaded.`);
   }
 }
 
@@ -273,13 +294,7 @@ export function loadDSOCatalog(filePath: string): void {
 export function loadStarCatalog(filePath: string): void {
   try {
     if (!fs.existsSync(filePath)) {
-      console.warn(`Star catalog file ${filePath} not found, using hardcoded catalog.`);
-      
-      // Load hardcoded data as fallback
-      Object.entries(HARDCODED_STAR_CATALOG).forEach(([name, coords]) => {
-        STAR_CATALOG.set(name.toLowerCase(), coords);
-      });
-      
+      console.warn(`Star catalog file ${filePath} not found. Data from this file will not be loaded.`);
       return;
     }
     
@@ -353,10 +368,22 @@ export function loadStarCatalog(filePath: string): void {
             continue;
           }
           
+          // Parse magnitude
+          let magnitude: number | undefined;
+          if (record.mag !== undefined && record.mag !== null && String(record.mag).trim() !== '') {
+            const magVal = parseFloat(String(record.mag));
+            if (!isNaN(magVal)) {
+              magnitude = magVal;
+            }
+          }
+
           // Store the coordinates
           STAR_CATALOG.set(name.toLowerCase(), {
+            name: name,
             rightAscension: raHours,
-            declination: decDegrees
+            declination: decDegrees,
+            magnitude: magnitude, // Add parsed magnitude
+            type: 'Star'
           });
         }
         
@@ -410,30 +437,39 @@ export function loadStarCatalog(filePath: string): void {
       if (!name || raHours === undefined || decDegrees === undefined || isNaN(raHours) || isNaN(decDegrees)) {
         continue;
       }
+
+      let magnitude: number | undefined;
+      if (record.mag !== undefined && record.mag !== null && record.mag !== '') {
+        const magVal = parseFloat(record.mag);
+        if (!isNaN(magVal)) {
+          magnitude = magVal;
+        }
+      }
       
       // Store the coordinates under the primary name
       STAR_CATALOG.set(name.toLowerCase(), {
+        name: name,
         rightAscension: raHours,
-        declination: decDegrees
+        declination: decDegrees,
+        magnitude: magnitude,
+        type: 'Star'
       });
       
       // Also store under alternative name if available
       if (altName) {
         STAR_CATALOG.set(altName.toLowerCase(), {
+          name: name, // Use primary name for consistency, altName is just for lookup
           rightAscension: raHours,
-          declination: decDegrees
+          declination: decDegrees,
+          magnitude: magnitude,
+          type: 'Star'
         });
       }
     }
     
     console.log(`Loaded ${STAR_CATALOG.size} stars from ${filePath}`);
   } catch (error) {
-    console.error(`Failed to load star catalog: ${error}`);
-    
-    // Load hardcoded data as fallback
-    Object.entries(HARDCODED_STAR_CATALOG).forEach(([name, coords]) => {
-      STAR_CATALOG.set(name.toLowerCase(), coords);
-    });
+    console.error(`Failed to load star catalog from ${filePath}: ${error}. Data from this file will not be loaded.`);
   }
 }
 
@@ -445,105 +481,63 @@ export function initializeCatalogs(): void {
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = dirname(__filename);
   const dataDir = path.resolve(__dirname, '../../data');
+  const projectRoot = path.resolve(__dirname, '../../..'); // Project root for running script
   console.log(`Looking for catalog data in: ${dataDir}`);
   
   // Check if data directory exists
   if (!fs.existsSync(dataDir)) {
-    console.warn(`Data directory not found at ${dataDir}. Please run 'npm run fetch-catalogs' to download catalog data.`);
+    console.warn(`Data directory not found at ${dataDir}. It will be created. The application will attempt to download catalogs.`);
     fs.mkdirSync(dataDir, { recursive: true });
   }
   
-  // Try to load Star catalog
-  const starCatalogFiles = [
+  // --- Star Catalog ---
+  let starCatalogLoaded = false;
+  const primaryStarFiles = [
     'hygdata_v41.csv',
     'stars.csv',
-    'bright_stars.csv',
-    'sample_stars.csv'
+    'bright_stars.csv'
   ];
-  
-  let starCatalogLoaded = false;
-  for (const file of starCatalogFiles) {
+  // sample_stars.csv is in the repo, so check for it as a last resort among existing files.
+  const allStarFilesToCheck = [...primaryStarFiles, 'sample_stars.csv']; 
+
+  for (const file of allStarFilesToCheck) {
     const filePath = path.join(dataDir, file);
     if (fs.existsSync(filePath)) {
-      console.log(`Loading star catalog from ${file}`);
+      console.log(`Loading star catalog from ${filePath}`);
       loadStarCatalog(filePath);
       starCatalogLoaded = true;
       break;
     }
   }
-  
+
   if (!starCatalogLoaded) {
-    console.warn('No star catalog found, using hardcoded catalog');
-    // Create a sample star catalog in data directory
-    try {
-      const sampleStarCsvContent = 
-        "name,ra_hours,dec_degrees\n" +
-        "Sirius,6.7525,-16.7161\n" +
-        "Canopus,6.3992,-52.6956\n" +
-        "Arcturus,14.2612,19.1822\n" +
-        "Vega,18.6157,38.7836\n" +
-        "Capella,5.2778,45.9981\n" +
-        "Rigel,5.2422,-8.2017\n" +
-        "Procyon,7.6550,5.2242\n" +
-        "Betelgeuse,5.9194,7.4071\n" +
-        "Achernar,1.6285,-57.2367\n" +
-        "Polaris,2.5301,89.2641";
-      
-      const sampleFilePath = path.join(dataDir, 'sample_stars.csv');
-      fs.writeFileSync(sampleFilePath, sampleStarCsvContent);
-      console.log(`Created sample star catalog at ${sampleFilePath}`);
-      loadStarCatalog(sampleFilePath);
-    } catch (error) {
-      console.error(`Error creating sample star catalog: ${error}`);
-      // Fall back to hardcoded values if file creation fails
-      Object.entries(HARDCODED_STAR_CATALOG).forEach(([name, coords]) => {
-        STAR_CATALOG.set(name.toLowerCase(), coords);
-      });
-    }
+    console.warn('No star catalog file was successfully loaded, even after download attempt. Star catalog will be empty or incomplete.');
+    // STAR_CATALOG will remain as it is (likely empty).
   }
-  
-  // Try to load DSO catalog
-  const dsoCatalogFiles = [
+
+  // --- DSO Catalog ---
+  let dsoCatalogLoaded = false;
+  const primaryDsoFiles = [
     'ngc.csv',
     'messier.csv',
-    'dso.csv',
-    'sample_dso.csv'
+    'dso.csv'
   ];
-  
-  let dsoCatalogLoaded = false;
-  for (const file of dsoCatalogFiles) {
+  // sample_dso.csv is in the repo, so check for it as a last resort among existing files.
+  const allDsoFilesToCheck = [...primaryDsoFiles, 'sample_dso.csv'];
+
+  for (const file of allDsoFilesToCheck) {
     const filePath = path.join(dataDir, file);
     if (fs.existsSync(filePath)) {
-      console.log(`Loading DSO catalog from ${file}`);
+      console.log(`Loading DSO catalog from ${filePath}`);
       loadDSOCatalog(filePath);
       dsoCatalogLoaded = true;
       break;
     }
   }
-  
+
   if (!dsoCatalogLoaded) {
-    console.warn('No DSO catalog found, using hardcoded catalog');
-    // Create a sample DSO catalog in data directory
-    try {
-      const sampleDsoCsvContent = 
-        "name,ra_hours,dec_degrees,common_name,type\n" +
-        "M1,5.5756,22.0145,Crab Nebula,Nebula\n" +
-        "M31,0.7122,41.2689,Andromeda Galaxy,Galaxy\n" +
-        "M42,5.5883,-5.3895,Orion Nebula,Nebula\n" +
-        "M45,3.7833,24.1167,Pleiades,Open Cluster\n" +
-        "M51,13.4997,47.1950,Whirlpool Galaxy,Galaxy";
-      
-      const sampleFilePath = path.join(dataDir, 'sample_dso.csv');
-      fs.writeFileSync(sampleFilePath, sampleDsoCsvContent);
-      console.log(`Created sample DSO catalog at ${sampleFilePath}`);
-      loadDSOCatalog(sampleFilePath);
-    } catch (error) {
-      console.error(`Error creating sample DSO catalog: ${error}`);
-      // Fall back to hardcoded values if file creation fails
-      Object.entries(HARDCODED_MESSIER_CATALOG).forEach(([name, coords]) => {
-        DSO_CATALOG.set(name.toLowerCase(), coords);
-      });
-    }
+    console.warn('No DSO catalog file was successfully loaded, even after download attempt. DSO catalog will be empty or incomplete.');
+    // DSO_CATALOG will remain as it is (likely empty).
   }
 }
 
@@ -900,6 +894,50 @@ export function getObjectDetails(objectName: string, date: Date, observer: Obser
   };
 }
 
+/**
+ * Star hopping utility functions
+ */
+export function findNearbyStars(
+  targetCoords: EquatorialCoordinates,
+  maxDistance: number, // in degrees
+  date: Date
+): { name: string, coords: EquatorialCoordinates }[] {
+  const nearbyStars: { name: string, coords: EquatorialCoordinates }[] = [];
+  
+  // Convert max distance from degrees to radians
+  const maxDistRad = maxDistance * (Math.PI / 180);
+  
+  // Search through star catalog
+  for (const [name, coords] of STAR_CATALOG.entries()) {
+    // Skip the target star itself
+    if (name.toLowerCase() === targetCoords.name?.toLowerCase()) {
+      continue;
+    }
+    
+    // Calculate angular distance using spherical law of cosines
+    const sinDec1 = Math.sin(targetCoords.declination * (Math.PI / 180));
+    const cosDec1 = Math.cos(targetCoords.declination * (Math.PI / 180));
+    const sinDec2 = Math.sin(coords.declination * (Math.PI / 180));
+    const cosDec2 = Math.cos(coords.declination * (Math.PI / 180));
+    const deltaRA = (coords.rightAscension - targetCoords.rightAscension) * (Math.PI / 180);
+    
+    // Angular distance in radians
+    const angularDistance = Math.acos(sinDec1 * sinDec2 + cosDec1 * cosDec2 * Math.cos(deltaRA));
+    
+    // If the distance is within the maxDistance, add to results
+    if (angularDistance <= maxDistRad) {
+      nearbyStars.push({ name, coords });
+    }
+  }
+  
+  return nearbyStars;
+}
+
+/**
+ * List all celestial objects from catalogs
+ * @param category Optional category filter ('stars', 'planets', 'dso', or 'all')
+ * @returns Array of objects grouped by category
+ */
 export function listCelestialObjects(category: string = 'all'): { category: string, objects: string[] }[] {
   const result: { category: string, objects: string[] }[] = [];
   
@@ -990,4 +1028,51 @@ export function listCelestialObjects(category: string = 'all'): { category: stri
   }
   
   return result;
+}
+
+// Corrected export of calculateAngularSeparation
+export function calculateAngularSeparation(
+  coords1: { rightAscension: number; declination: number },
+  coords2: { rightAscension: number; declination: number }
+): number {
+  // Use the spherical law of cosines for angular separation
+  const ra1Rad = coords1.rightAscension * 15 * Math.PI / 180;
+  const ra2Rad = coords2.rightAscension * 15 * Math.PI / 180;
+  const dec1Rad = coords1.declination * Math.PI / 180;
+  const dec2Rad = coords2.declination * Math.PI / 180;
+
+  const cosDeltaSigma =
+    Math.sin(dec1Rad) * Math.sin(dec2Rad) +
+    Math.cos(dec1Rad) * Math.cos(dec2Rad) * Math.cos(ra1Rad - ra2Rad);
+
+  // Clamp the value to [-1, 1] to avoid NaN from Math.acos due to floating point inaccuracies
+  const clampedCosDeltaSigma = Math.max(-1, Math.min(1, cosDeltaSigma));
+
+  return Math.acos(clampedCosDeltaSigma) * (180 / Math.PI);
+}
+
+// Corrected export of calculateBearing
+export function calculateBearing(
+  coords1: { rightAscension: number; declination: number },
+  coords2: { rightAscension: number; declination: number }
+): { degrees: number; cardinal: string } {
+  // Compute position angle (bearing) from coords1 to coords2
+  const ra1Rad = coords1.rightAscension * 15 * Math.PI / 180;
+  const ra2Rad = coords2.rightAscension * 15 * Math.PI / 180;
+  const dec1Rad = coords1.declination * Math.PI / 180;
+  const dec2Rad = coords2.declination * Math.PI / 180;
+
+  // Formula for position angle (bearing) from coords1 to coords2
+  const y = Math.sin(ra2Rad - ra1Rad);
+  const x = Math.cos(dec1Rad) * Math.tan(dec2Rad) - Math.sin(dec1Rad) * Math.cos(ra2Rad - ra1Rad);
+  let angleDegrees = Math.atan2(y, x) * (180 / Math.PI);
+  if (angleDegrees < 0) angleDegrees += 360;
+
+  const directions = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+  // Ensure positive index before modulo, and handle potential floating point inaccuracies for rounding.
+  // Adding 0.001 before rounding helps stabilize index selection for angles very close to a boundary (e.g. 359.99 deg)
+  const index = Math.round((angleDegrees / 22.5) + 0.001) % 16;
+  const cardinal = directions[index];
+
+  return { degrees: parseFloat(angleDegrees.toFixed(1)), cardinal };
 }

@@ -20,10 +20,11 @@ CelestialMCP is built with the mcp-framework and leverages the astronomy-engine 
 
 ### Tools
 
-The server provides two primary tools for the AI to use:
+The server provides three primary tools for the AI to use:
 
 1.  **`getCelestialDetails`**: Retrieves detailed astronomical information for a specific celestial object.
 2.  **`listCelestialObjects`**: Lists available celestial objects known to the system, filterable by category.
+3.  **`getStarHoppingPath`**: Calculates a star hopping path from a bright start star to a target celestial object.
 
 ## Setup and Installation
 
@@ -49,7 +50,7 @@ The server provides two primary tools for the AI to use:
     ```bash
     npm run fetch-catalogs
     ```
-    This script downloads the HYG star database and the OpenNGC (New General Catalogue) deep sky object catalog into the `data/` directory. If these files are not downloaded, the application will use small, hardcoded sample catalogs.
+    This script downloads the HYG star database and the OpenNGC (New General Catalogue) deep sky object catalog into the `data/` directory. If these files are not downloaded, the application will attempt to use `sample_stars.csv` and `sample_dso.csv` from the `data/` directory if present. If no catalog files are found, the respective catalogs will be empty.
 
 4.  **Build the project:**
     This compiles the TypeScript code to JavaScript.
@@ -99,7 +100,7 @@ The `npm run fetch-catalogs` script downloads:
 - `hygdata_v41.csv`: The HYG star database (approx. 120,000 stars).
 - `ngc.csv`: The OpenNGC catalog (approx. 14,000 deep sky objects).
 
-These files are stored in the `data/` directory. If these primary catalog files are not found, the application will automatically create and use smaller `sample_stars.csv` and `sample_dso.csv` files to ensure basic functionality. For comprehensive data, running `npm run fetch-catalogs` is highly recommended.
+These files are stored in the `data/` directory. If these primary catalog files are not found, the application will attempt to load `sample_stars.csv` and `sample_dso.csv` if they exist in the `data/` directory. For comprehensive data, running `npm run fetch-catalogs` is highly recommended.
 
 ## Tool Usage
 
@@ -142,6 +143,28 @@ All astronomical calculations performed by these tools use the **pre-configured 
 -   "What deep sky objects (`dso`) are available?"
 -   "Can you list all objects known to the system?"
 
+### 3. `getStarHoppingPath`
+
+**Purpose:** Calculates a star hopping path from a bright start star to a target celestial object. Each hop is within the specified Field of View (FOV). This tool helps observers manually locate dimmer objects by "hopping" from one recognizable star to another.
+
+**Parameters:**
+-   `targetObjectName` (string): The name or catalog identifier of the celestial object to find.
+    *Examples: "M13", "Andromeda Galaxy", "Mars", "NGC 7000"*
+-   `fovDegrees` (number, positive): The Field of View (FOV) of the user's equipment in degrees (e.g., binoculars, telescope eyepiece).
+    *Example: 5.0*
+-   `maxHopMagnitude` (number, optional, default: 8.0): The maximum (dimmest) stellar magnitude for stars to be included in the hopping path. Brighter stars have lower magnitude values.
+    *Example: 7.5*
+-   `initialSearchRadiusDegrees` (number, positive, optional, default: 20.0): The angular radius (in degrees) around the target object to search for a suitable bright starting star.
+    *Example: 25.0*
+-   `startStarMagnitudeThreshold` (number, optional, default: 3.5): The maximum (dimmest) magnitude for a star to be considered a good, bright "starting star" for the hop sequence.
+    *Example: 4.0*
+
+**Example Claude Prompts:**
+-   "Find a star hopping path to M13 with a 5 degree FOV."
+-   "Can you give me a star hop sequence to the Ring Nebula (M57) using an 8x50 binocular (FOV around 6 degrees) and stars no dimmer than magnitude 7?"
+-   "I need to find NGC 253. My telescope has a 1 degree field of view. Find a path starting from a star brighter than magnitude 3, within 20 degrees of the target."
+-   "Generate a star hopping guide to the Sombrero Galaxy, assuming a 2 degree FOV and max hop magnitude of 8.5."
+
 ## Project Structure
 
 ```text
@@ -149,7 +172,8 @@ CelestialMCP/
 ├── src/
 │   ├── tools/                      # MCP Tools provided to the AI
 │   │   ├── CelestialDetailsTool.ts   # Tool to get detailed info for an object
-│   │   └── ListCelestialObjectsTool.ts # Tool to list available objects
+│   │   ├── ListCelestialObjectsTool.ts # Tool to list available objects
+│   │   └── StarHoppingTool.ts        # Tool to calculate star hopping paths
 │   ├── utils/                      # Utility functions
 │   │   └── astronomy.ts            # Core astronomy calculations and catalog loading
 │   ├── config.ts                   # Observer's location and atmospheric conditions configuration

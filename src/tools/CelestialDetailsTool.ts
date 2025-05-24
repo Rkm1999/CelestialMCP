@@ -68,6 +68,7 @@ class CelestialDetailsTool extends MCPTool<CelestialDetailsInput> {
       // Format the response
       const response: any = {
         object: params.objectName,
+        ...(typeof equatorialCoords.magnitude === 'number' && { apparentMagnitude: equatorialCoords.magnitude }),
         observationTime: date.toLocaleString() + " (system local time)",  
         location: locationName,
         coordinates: {
