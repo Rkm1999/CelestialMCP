@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/rkm1999-celestialmcp-badge.png)](https://mseep.ai/app/rkm1999-celestialmcp)
+
 # CelestialMCP
 
 A Model Context Protocol (MCP) server designed for AI assistants like Claude. It provides tools to access astronomical data, such as celestial object positions, rise/set times, visibility, and catalog information.
